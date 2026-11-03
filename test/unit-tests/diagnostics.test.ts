@@ -282,6 +282,31 @@ suite('Diagnostics', () => {
         expect(diag.message).to.eq(`unused parameter ‘v’ [-Wunused-parameter]`);
         expect(diag.severity).to.eq('warning');
     });
+    test('Parsing gfortran diagnostics with capitalized severities', async () => {
+        build_consumer.config.updatePartial({ enabledOutputParsers: [ 'gcc' ] });
+        const lines = [
+            '/path/to/file.f03:3:11: Warning: ‘j’ is used uninitialized [-Wuninitialized]',
+            '/path/to/file.f03:2:14: note: ‘j’ was declared here',
+            '/path/to/file.f03:2:6: Error: Invalid character in name at (1)',
+            '/path/to/file.f03:2:7: Fatal Error: Cannot open module file ‘nosuchmod.mod’ for reading at (1): No such file or directory'
+        ];
+        feedLines(build_consumer, [], lines);
+
+        const raw = build_consumer.compilers.gcc.diagnostics;
+        expect(raw).to.have.length(3);
+        expect(raw.map(d => d.severity)).to.deep.eq(['warning', 'error', 'error']);
+        expect(raw[0].message).to.eq('‘j’ is used uninitialized [-Wuninitialized]');
+        expect(raw[0].related).to.have.length(1);
+        expect(raw[0].related[0].message).to.eq('‘j’ was declared here');
+        expect(raw[2].message).to.eq('Cannot open module file ‘nosuchmod.mod’ for reading at (1): No such file or directory');
+
+        const resolved = await build_consumer.resolveDiagnostics('dummyPath');
+        expect(resolved.map(d => d.diag.severity)).to.deep.eq([
+            vscode.DiagnosticSeverity.Warning,
+            vscode.DiagnosticSeverity.Error,
+            vscode.DiagnosticSeverity.Error
+        ]);
+    });
     test('Parsing non-diagnostic', async () => {
         const lines = ['/usr/include/c++/10/bits/stl_vector.h:98:47: optimized: basic block part vectorized using 32 byte vectors'];
         feedLines(build_consumer, [], lines);
